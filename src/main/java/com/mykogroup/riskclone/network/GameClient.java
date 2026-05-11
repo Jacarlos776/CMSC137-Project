@@ -94,6 +94,10 @@ public class GameClient {
                             mapper.treeToValue(msg.payload, PlayerDisconnectedPayload.class);
                     listener.onPlayerDisconnected(p.playerId);
                 }
+                case MessageType.TIMER_UPDATE -> {
+                    TimerUpdatePayload p = mapper.treeToValue(msg.payload, TimerUpdatePayload.class);
+                    listener.onTimerUpdate(p.phase, p.secondsRemaining);
+                }
                 case MessageType.ERROR -> {
                     ErrorPayload p = mapper.treeToValue(msg.payload, ErrorPayload.class);
                     listener.onError(p.message);

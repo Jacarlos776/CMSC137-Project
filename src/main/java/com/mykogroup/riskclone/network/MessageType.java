@@ -20,6 +20,7 @@ public final class MessageType {
     public static final String STATE_UPDATE          = "STATE_UPDATE";
     public static final String GAME_OVER             = "GAME_OVER";
     public static final String PLAYER_DISCONNECTED   = "PLAYER_DISCONNECTED";
+    public static final String TIMER_UPDATE          = "TIMER_UPDATE";
     public static final String ERROR                 = "ERROR";
 
     private MessageType() {}

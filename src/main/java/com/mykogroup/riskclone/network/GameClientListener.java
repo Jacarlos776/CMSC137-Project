@@ -11,4 +11,5 @@ public interface GameClientListener {
     void onPlayerDisconnected(String playerId);
     void onError(String message);
     void onDisconnected();          // socket closed / server unreachable
+    default void onTimerUpdate(String phase, int secondsRemaining) {}
 }

@@ -887,6 +887,10 @@ public class Main extends Application {
         }
         @Override public void onError(String m) { lobby.onError(m); controller.onError(m); }
         @Override public void onDisconnected() { lobby.onDisconnected(); controller.onDisconnected(); }
+        @Override public void onTimerUpdate(String phase, int secondsRemaining) {
+            lobby.onTimerUpdate(phase, secondsRemaining);
+            controller.onTimerUpdate(phase, secondsRemaining);
+        }
     }
 
     private void launchNetworkGameView(GameState masterState, InteractiveMapPane gameBoard) {

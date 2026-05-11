@@ -13,6 +13,10 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 public class GameServer {
 
@@ -33,6 +37,16 @@ public class GameServer {
     private AdjacencyService adjacencyService;
     private AiController aiController;
     private final ResolutionEngine resolutionEngine = new ResolutionEngine();
+
+    private static final int PHASE_SECONDS = 60;
+    private final ScheduledExecutorService timerExecutor =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "server-timer");
+                t.setDaemon(true);
+                return t;
+            });
+    private ScheduledFuture<?> timerTask;
+    private int timerSecondsRemaining = 0;
 
     private static final String[] AI_NAMES = {
         "Jose Rizal", "Andres Bonifacio", "Lapu-lapu", "Antonio Luna",
@@ -65,6 +79,37 @@ public class GameServer {
     public void stop() {
         try { serverSocket.close(); } catch (IOException ignored) {}
         clients.forEach(ClientHandler::close);
+        timerExecutor.shutdownNow();
+    }
+
+    // --- Phase Timer (host-authoritative) ---
+
+    // Caller must already hold the GameServer monitor.
+    private void startPhaseTimer(int seconds) {
+        stopPhaseTimer();
+        timerSecondsRemaining = seconds;
+        broadcast(build(MessageType.TIMER_UPDATE, null,
+                new TimerUpdatePayload(gameState.getCurrentPhase().name(), timerSecondsRemaining)));
+        timerTask = timerExecutor.scheduleAtFixedRate(this::tick, 1, 1, TimeUnit.SECONDS);
+    }
+
+    private void stopPhaseTimer() {
+        if (timerTask != null) {
+            timerTask.cancel(false);
+            timerTask = null;
+        }
+    }
+
+    private synchronized void tick() {
+        if (gameState == null || timerTask == null) return;
+        timerSecondsRemaining--;
+        broadcast(build(MessageType.TIMER_UPDATE, null,
+                new TimerUpdatePayload(gameState.getCurrentPhase().name(),
+                        Math.max(0, timerSecondsRemaining))));
+        if (timerSecondsRemaining <= 0) {
+            stopPhaseTimer();
+            advancePhase();
+        }
     }
 
     private void acceptLoop() {
@@ -206,6 +251,13 @@ public class GameServer {
 
     public synchronized void onEndTurn(String pid) {
         if (gameState == null) return;
+        // Toggle: clicking Finished Turn again cancels the ready state, as long
+        // as the phase hasn't already advanced.
+        if (gameState.isPlayerReady(pid)) {
+            gameState.clearPlayerReady(pid);
+            broadcastStateUpdate();
+            return;
+        }
         gameState.setPlayerReady(pid);
         broadcastStateUpdate();
         if (gameState.areAllPlayersReady()) {
@@ -228,26 +280,33 @@ public class GameServer {
                     .findFirst().ifPresent(p -> p.setAi(true));
             broadcast(build(MessageType.PLAYER_DISCONNECTED, null,
                     new PlayerDisconnectedPayload(pid)));
-            // Auto-submit End Turn for them so the game can advance
-            onEndTurn(pid);
+            // Force-ready the disconnected player so the game can advance.
+            // (Don't go through onEndTurn — it toggles, which would un-ready
+            // them if they had already submitted before disconnecting.)
+            gameState.setPlayerReady(pid);
+            broadcastStateUpdate();
+            if (gameState.areAllPlayersReady()) advancePhase();
         }
     }
 
     // --- Phase Progression ---
 
     private void advancePhase() {
+        stopPhaseTimer();
         switch (gameState.getCurrentPhase()) {
             case CLAIMING -> {
                 gameState.setCurrentPhase(GameState.GamePhase.DRAFTING);
                 gameState.initDraftPools(5);
                 gameState.resetReadyStates();
                 broadcastStateUpdate();
+                startPhaseTimer(PHASE_SECONDS);
                 runAiTurnsIfNeeded();
             }
             case DRAFTING -> {
                 gameState.setCurrentPhase(GameState.GamePhase.PLANNING);
                 gameState.resetReadyStates();
                 broadcastStateUpdate();
+                startPhaseTimer(PHASE_SECONDS);
                 runAiTurnsIfNeeded();
             }
             case PLANNING -> {
@@ -264,6 +323,7 @@ public class GameServer {
                     gameState.initDraftPools(5);
                     gameState.resetReadyStates();
                     broadcastStateUpdate();
+                    startPhaseTimer(PHASE_SECONDS);
                     runAiTurnsIfNeeded();
                 }
             }

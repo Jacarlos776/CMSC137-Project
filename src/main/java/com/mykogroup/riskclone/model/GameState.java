@@ -198,6 +198,14 @@ public class GameState {
         readyPlayers.add(playerId);
     }
 
+    public void clearPlayerReady(String playerId) {
+        readyPlayers.remove(playerId);
+    }
+
+    public boolean isPlayerReady(String playerId) {
+        return readyPlayers.contains(playerId);
+    }
+
     public GamePhase getCurrentPhase() { return currentPhase; }
     public void setCurrentPhase(GamePhase currentPhase) { this.currentPhase = currentPhase; }
 

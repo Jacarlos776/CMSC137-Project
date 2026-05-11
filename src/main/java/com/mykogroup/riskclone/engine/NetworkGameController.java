@@ -37,6 +37,15 @@ public class NetworkGameController implements GameClientListener {
     // Callback so Main can show the game-over screen (winnerId = null means draw)
     private Consumer<String> onGameOverCallback;
 
+    // Toggle state for the Finished Turn button
+    private boolean isReady = false;
+    private String lastPhase = null;
+
+    private static final String FINISHED_STYLE =
+            "-fx-font-size: 16px; -fx-font-weight: bold; -fx-background-color: #f59e0b; -fx-text-fill: white;";
+    private static final String CANCEL_STYLE =
+            "-fx-font-size: 16px; -fx-font-weight: bold; -fx-background-color: #ef4444; -fx-text-fill: white;";
+
     public NetworkGameController() {}
 
     // Set after construction to break the circular dependency with GameClient
@@ -62,6 +71,7 @@ public class NetworkGameController implements GameClientListener {
         );
 
         finishedTurnBtn.setText("Finished Turn");
+        finishedTurnBtn.setStyle(FINISHED_STYLE);
         finishedTurnBtn.setOnAction(e -> submitFinishedTurn());
     }
 
@@ -84,9 +94,15 @@ public class NetworkGameController implements GameClientListener {
     }
 
     public void submitFinishedTurn() {
+        isReady = !isReady;
         if (finishedTurnBtn != null) {
-            finishedTurnBtn.setDisable(true);
-            finishedTurnBtn.setText("Waiting for others...");
+            if (isReady) {
+                finishedTurnBtn.setText("Cancel");
+                finishedTurnBtn.setStyle(CANCEL_STYLE);
+            } else {
+                finishedTurnBtn.setText("Finished Turn");
+                finishedTurnBtn.setStyle(FINISHED_STYLE);
+            }
         }
         send(MessageType.END_TURN, null);
     }
@@ -128,14 +144,21 @@ public class NetworkGameController implements GameClientListener {
                 gameBoard.renderState(state);
             }
 
-            // Re-enable the button so the player can act on the new phase
-            if (finishedTurnBtn != null) {
+            // Reset the toggle when the phase actually changes; intra-phase
+            // STATE_UPDATEs (e.g. someone else's claim) preserve our ready state.
+            boolean phaseChanged = payload.phase != null && !payload.phase.equals(lastPhase);
+            lastPhase = payload.phase;
+            if (phaseChanged && finishedTurnBtn != null) {
+                isReady = false;
                 finishedTurnBtn.setDisable(false);
                 finishedTurnBtn.setText("Finished Turn");
+                finishedTurnBtn.setStyle(FINISHED_STYLE);
             }
 
-            if (timerLabel != null) {
+            if (timerLabel != null && phaseChanged) {
+                // Render the phase name immediately; subsequent TIMER_UPDATEs overwrite this.
                 timerLabel.setText(payload.phase);
+                timerLabel.setTextFill(javafx.scene.paint.Color.WHITE);
             }
 
             if (playerTurnLabel != null && localPlayerId != null) {
@@ -169,6 +192,17 @@ public class NetworkGameController implements GameClientListener {
         Platform.runLater(() -> {
             if (timerLabel != null)
                 timerLabel.setText("Player " + playerId + " disconnected — taken over by AI");
+        });
+    }
+
+    @Override
+    public void onTimerUpdate(String phase, int secondsRemaining) {
+        Platform.runLater(() -> {
+            if (timerLabel == null) return;
+            timerLabel.setText(phase + " Phase: " + secondsRemaining + "s");
+            timerLabel.setTextFill(secondsRemaining <= 5
+                    ? javafx.scene.paint.Color.RED
+                    : javafx.scene.paint.Color.WHITE);
         });
     }
 
