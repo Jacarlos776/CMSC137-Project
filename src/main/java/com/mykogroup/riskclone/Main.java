@@ -224,7 +224,11 @@ public class Main extends Application {
             launchGameView(masterState, gameBoard);
         });
 
-        menuRoot.getChildren().addAll(titleLabel, playerRowsContainer, addPlayerBtn, startBtn);
+        Button backBtn = new Button("Back");
+        backBtn.setStyle("-fx-font-size: 13px; -fx-background-color: #4a5568; -fx-text-fill: white; -fx-padding: 6 16;");
+        backBtn.setOnAction(e -> resetGameToMenu());
+
+        menuRoot.getChildren().addAll(titleLabel, playerRowsContainer, addPlayerBtn, startBtn, backBtn);
         mainScene.setRoot(menuRoot); // Attach menu to the window
     }
 
