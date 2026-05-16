@@ -396,11 +396,13 @@ public class InteractiveMapPane extends Pane {
             }
         }
 
-        // In network mode: redraw all arrows from the server's queued moves list
+        // In network mode: redraw arrows from the server's queued moves list.
+        // Only show the local player's own moves — opponents' planning stays hidden.
         if (networkClaimHandler != null) {
             arrowLayer.getChildren().clear();
             activeArrows.clear();
             for (Move move : state.getQueuedMoves()) {
+                if (!move.playerId().equals(currentLocalPlayerId)) continue;
                 SVGPath src = findProvinceNode(move.fromId());
                 SVGPath tgt = findProvinceNode(move.toId());
                 if (src != null && tgt != null) {
@@ -654,6 +656,18 @@ public class InteractiveMapPane extends Pane {
         Object selObj = path.getProperties().get("selected");
         boolean isSelected = selObj instanceof Boolean b && b;
         path.setStyle(SvgMapLoader.generateStyle(newColor, isSelected, false));
+    }
+
+    public void drawArrowsForMoves(List<Move> moves) {
+        arrowLayer.getChildren().clear();
+        activeArrows.clear();
+        for (Move move : moves) {
+            SVGPath src = findProvinceNode(move.fromId());
+            SVGPath tgt = findProvinceNode(move.toId());
+            if (src != null && tgt != null) {
+                drawArrow(src, tgt, move.fromId() + "-" + move.toId());
+            }
+        }
     }
 
     public void zoomToProvince(String provinceId, double targetScale, Duration duration) {

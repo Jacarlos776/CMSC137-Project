@@ -159,9 +159,14 @@ public class NetworkGameController implements GameClientListener {
                 timerLabel.setText("RESOLUTION PHASE");
                 timerLabel.setTextFill(javafx.scene.paint.Color.GOLD);
             }
+            // Reveal every player's planned moves now that combat is resolving.
+            gameBoard.drawArrowsForMoves(payload.queuedMoves);
             ResolutionAnimator.play(gameBoard, draftCountLabel,
                     payload.results, payload.preOwners, payload.preArmies, payload.queuedMoves,
-                    () -> gameBoard.renderState(payload.finalState));
+                    () -> {
+                        gameBoard.renderState(payload.finalState);
+                        gameBoard.setInteractionLocked(false);
+                    });
         });
     }
 
