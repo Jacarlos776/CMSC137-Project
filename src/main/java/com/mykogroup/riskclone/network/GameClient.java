@@ -21,7 +21,8 @@ public class GameClient {
 
     // Connects to the server and starts the background read thread
     public void connect(String host, int port) throws IOException {
-        socket = new Socket(host, port);
+        socket = new Socket();
+        socket.connect(new java.net.InetSocketAddress(host, port), 5000); // 5s timeout
         out = new PrintWriter(new BufferedWriter(
                 new OutputStreamWriter(socket.getOutputStream())), true);
         Thread readThread = new Thread(this::readLoop, "client-read");

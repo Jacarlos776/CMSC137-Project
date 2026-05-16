@@ -135,7 +135,7 @@ public class GameServer {
         if (hostPlayerId == null) hostPlayerId = pid;
         handler.setPlayerId(pid);
 
-        lobbyPlayers.add(new LobbyPlayer(pid, payload.displayName, payload.preferredColor, false));
+        lobbyPlayers.add(new LobbyPlayer(pid, payload.displayName, payload.preferredColor, false, "/com/mykogroup/riskclone/assets/Avatar1.png"));
         playerColors.put(pid, payload.preferredColor);
 
         sendTo(handler, build(MessageType.JOIN_ACK, null, new JoinAckPayload(pid)));
@@ -148,7 +148,8 @@ public class GameServer {
         if (requesterId == null || !requesterId.equals(hostPlayerId) || gameStarted) return;
         String pid = "player" + (nextPlayerIndex++);
         String color = AI_COLORS[aiColorIdx++ % AI_COLORS.length];
-        lobbyPlayers.add(new LobbyPlayer(pid, AI_NAMES[aiNameIdx++ % AI_NAMES.length], color, true));
+        String avatar = "/com/mykogroup/riskclone/assets/Avatar" + ((aiNameIdx % 6) + 1) + ".png";
+        lobbyPlayers.add(new LobbyPlayer(pid, AI_NAMES[aiNameIdx++ % AI_NAMES.length], color, true, avatar));
         playerColors.put(pid, color);
         broadcast(build(MessageType.LOBBY_UPDATE, null,
                 new LobbyUpdatePayload(new ArrayList<>(lobbyPlayers))));
@@ -165,6 +166,13 @@ public class GameServer {
     public synchronized void onUpdateName(String pid, String newName) {
         lobbyPlayers.stream().filter(lp -> lp.playerId.equals(pid))
                 .findFirst().ifPresent(lp -> lp.displayName = newName);
+        broadcast(build(MessageType.LOBBY_UPDATE, null,
+                new LobbyUpdatePayload(new ArrayList<>(lobbyPlayers))));
+    }
+
+    public synchronized void onUpdateAvatar(String pid, String avatarPath) {
+        lobbyPlayers.stream().filter(lp -> lp.playerId.equals(pid))
+                .findFirst().ifPresent(lp -> lp.avatarPath = avatarPath);
         broadcast(build(MessageType.LOBBY_UPDATE, null,
                 new LobbyUpdatePayload(new ArrayList<>(lobbyPlayers))));
     }
@@ -211,7 +219,7 @@ public class GameServer {
 
         gameState = new GameState();
         for (LobbyPlayer lp : lobbyPlayers) {
-            gameState.getPlayers().add(new Player(lp.playerId, lp.displayName, lp.isAi));
+            gameState.getPlayers().add(new Player(lp.playerId, lp.displayName, lp.isAi, lp.avatarPath));
         }
         gameState.setRegions(RegionLoader.loadRegions("/com/mykogroup/riskclone/region.json"));
         for (String id : adjacencyService.getAllProvinceIds()) {
@@ -224,7 +232,10 @@ public class GameServer {
         Map<String, String> colorsCopy = new LinkedHashMap<>(playerColors);
         broadcast(build(MessageType.GAME_START, null,
                 new GameStartPayload(gameState, colorsCopy)));
-        // No broadcastStateUpdate here — GAME_START already carries the initial state
+        
+        // Start the timer for the first phase (CLAIMING)
+        startPhaseTimer(PHASE_SECONDS);
+        
         runAiTurnsIfNeeded();
     }
 

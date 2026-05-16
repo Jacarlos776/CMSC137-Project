@@ -51,6 +51,9 @@ public class NetworkGameController implements GameClientListener {
     // Set after construction to break the circular dependency with GameClient
     public void setClient(GameClient client) { this.client = client; }
 
+    private GameState lastReceivedState = null;
+    private Map<String, String> lastReceivedColors = null;
+
     // Called by Main once the game view is constructed
     public void attachUI(InteractiveMapPane gameBoard,
                          Label timerLabel,
@@ -73,6 +76,11 @@ public class NetworkGameController implements GameClientListener {
         finishedTurnBtn.setText("Finished Turn");
         finishedTurnBtn.setStyle(FINISHED_STYLE);
         finishedTurnBtn.setOnAction(e -> submitFinishedTurn());
+
+        // Apply any state received while the UI was still loading
+        if (lastReceivedState != null) {
+            refreshUI(lastReceivedState, lastPhase);
+        }
     }
 
     public void setLocalPlayerId(String pid)               { this.localPlayerId = pid; }
@@ -121,63 +129,64 @@ public class NetworkGameController implements GameClientListener {
 
     @Override
     public void onGameStart(GameStartPayload payload) {
+        this.lastReceivedState = payload.gameState;
+        this.lastReceivedColors = payload.colors;
         Platform.runLater(() -> {
             for (Map.Entry<String, String> e : payload.colors.entrySet()) {
                 ColorManager.setPlayerColor(e.getKey(), e.getValue());
             }
-            if (gameBoard != null) {
-                gameBoard.setCurrentLocalPlayerId(localPlayerId);
-                gameBoard.setGameState(payload.gameState);
-                gameBoard.renderState(payload.gameState);
-            }
+            refreshUI(payload.gameState, "CLAIMING");
         });
     }
 
     @Override
     public void onStateUpdate(StateUpdatePayload payload) {
+        this.lastReceivedState = payload.gameState;
         Platform.runLater(() -> {
-            GameState state = payload.gameState;
-
-            if (gameBoard != null) {
-                gameBoard.setCurrentLocalPlayerId(localPlayerId);
-                gameBoard.setGameState(state);
-                gameBoard.renderState(state);
-            }
-
-            // Reset the toggle when the phase actually changes; intra-phase
-            // STATE_UPDATEs (e.g. someone else's claim) preserve our ready state.
-            boolean phaseChanged = payload.phase != null && !payload.phase.equals(lastPhase);
-            lastPhase = payload.phase;
-            if (phaseChanged && finishedTurnBtn != null) {
-                isReady = false;
-                finishedTurnBtn.setDisable(false);
-                finishedTurnBtn.setText("Finished Turn");
-                finishedTurnBtn.setStyle(FINISHED_STYLE);
-            }
-
-            if (timerLabel != null && phaseChanged) {
-                // Render the phase name immediately; subsequent TIMER_UPDATEs overwrite this.
-                timerLabel.setText(payload.phase);
-                timerLabel.setTextFill(javafx.scene.paint.Color.WHITE);
-            }
-
-            if (playerTurnLabel != null && localPlayerId != null) {
-                state.getPlayers().stream()
-                        .filter(p -> p.getId().equals(localPlayerId))
-                        .findFirst()
-                        .ifPresent(p -> playerTurnLabel.setText("You: " + p.getDisplayName()));
-            }
-
-            if (draftCountLabel != null) {
-                int draftsLeft = state.getDraftArmies(localPlayerId);
-                if (state.getCurrentPhase() == GameState.GamePhase.DRAFTING && draftsLeft > 0) {
-                    draftCountLabel.setText("Armies left: " + draftsLeft);
-                    draftCountLabel.setVisible(true);
-                } else {
-                    draftCountLabel.setVisible(false);
-                }
-            }
+            refreshUI(payload.gameState, payload.phase);
         });
+    }
+
+    private void refreshUI(GameState state, String phase) {
+        if (gameBoard != null) {
+            gameBoard.setCurrentLocalPlayerId(localPlayerId);
+            gameBoard.setGameState(state);
+            gameBoard.renderState(state);
+        }
+
+        // Reset the toggle when the phase actually changes; intra-phase
+        // STATE_UPDATEs (e.g. someone else's claim) preserve our ready state.
+        boolean phaseChanged = phase != null && !phase.equals(lastPhase);
+        lastPhase = phase;
+        if (phaseChanged && finishedTurnBtn != null) {
+            isReady = false;
+            finishedTurnBtn.setDisable(false);
+            finishedTurnBtn.setText("Finished Turn");
+            finishedTurnBtn.setStyle(FINISHED_STYLE);
+        }
+
+        if (timerLabel != null && phaseChanged) {
+            // Render the phase name immediately; subsequent TIMER_UPDATEs overwrite this.
+            timerLabel.setText(phase);
+            timerLabel.setTextFill(javafx.scene.paint.Color.WHITE);
+        }
+
+        if (playerTurnLabel != null && localPlayerId != null) {
+            state.getPlayers().stream()
+                    .filter(p -> p.getId().equals(localPlayerId))
+                    .findFirst()
+                    .ifPresent(p -> playerTurnLabel.setText("You: " + p.getDisplayName()));
+        }
+
+        if (draftCountLabel != null) {
+            int draftsLeft = state.getDraftArmies(localPlayerId);
+            if (state.getCurrentPhase() == GameState.GamePhase.DRAFTING && draftsLeft > 0) {
+                draftCountLabel.setText("Armies left: " + draftsLeft);
+                draftCountLabel.setVisible(true);
+            } else {
+                draftCountLabel.setVisible(false);
+            }
+        }
     }
 
     @Override

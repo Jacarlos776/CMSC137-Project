@@ -23,11 +23,13 @@ public class ResolutionEngine {
         }
     }
 
-    public void processTurn(GameState state) {
+    public List<ResolutionResult> processTurn(GameState state) {
         List<MarchingArmy> activeArmies = new ArrayList<>();
         for (Move m : state.getQueuedMoves()) {
             activeArmies.add(new MarchingArmy(m));
         }
+
+        List<ResolutionResult> results = new ArrayList<>();
 
         // ---------------------------------------------------------
         // PHASE 1: DEPARTURES
@@ -46,33 +48,25 @@ public class ResolutionEngine {
                 MarchingArmy a1 = activeArmies.get(i);
                 MarchingArmy a2 = activeArmies.get(j);
 
-                // If they are crossing paths and belong to different players
                 if (a1.fromId.equals(a2.toId) && a1.toId.equals(a2.fromId) && !a1.playerId.equals(a2.playerId)) {
-
-                    // TODO: Future Variance Hook
-                    // int a1Effective = a1.armies + (int)(a1.armies * randomVariance);
-                    // int a2Effective = a2.armies + (int)(a2.armies * randomVariance);
-
                     if (a1.armies > a2.armies) {
                         a1.armies -= a2.armies;
                         a2.armies = 0;
                     } else if (a2.armies > a1.armies) {
                         a2.armies -= a1.armies;
                         a1.armies = 0;
-                    } else { // Tie
+                    } else {
                         a1.armies = 0;
                         a2.armies = 0;
                     }
                 }
             }
         }
-        // Remove wiped-out armies
         activeArmies.removeIf(a -> a.armies <= 0);
 
         // ---------------------------------------------------------
         // PHASE 3: CONVERGENCE & CLASHES
         // ---------------------------------------------------------
-        // Group remaining marching armies by their destination
         Map<String, List<MarchingArmy>> arrivals = new HashMap<>();
         for (MarchingArmy a : activeArmies) {
             arrivals.computeIfAbsent(a.toId, k -> new ArrayList<>()).add(a);
@@ -80,64 +74,62 @@ public class ResolutionEngine {
 
         for (Province p : state.getProvinces()) {
             List<MarchingArmy> arrivingHere = arrivals.getOrDefault(p.getId(), Collections.emptyList());
-            if (arrivingHere.isEmpty()) continue; // Nobody is moving here
+            if (arrivingHere.isEmpty()) continue;
 
-            // Pool all forces present in the province by Player ID
             Map<String, Integer> forcesByPlayer = new HashMap<>();
+            List<String> involvedPlayers = new ArrayList<>();
 
-            // Add the defending garrison (if any)
             if (p.getOwnerId() != null && p.getArmyCount() > 0) {
                 forcesByPlayer.put(p.getOwnerId(), p.getArmyCount());
+                involvedPlayers.add(p.getOwnerId());
             }
 
-            // Add all arriving attackers/reinforcements
             for (MarchingArmy a : arrivingHere) {
                 forcesByPlayer.put(a.playerId, forcesByPlayer.getOrDefault(a.playerId, 0) + a.armies);
+                if (!involvedPlayers.contains(a.playerId)) involvedPlayers.add(a.playerId);
             }
 
-            // If only one player has troops here (Peaceful transfer/reinforcement)
+            String description;
             if (forcesByPlayer.size() == 1) {
                 String singlePlayer = forcesByPlayer.keySet().iterator().next();
                 p.setOwnerId(singlePlayer);
                 p.setArmyCount(forcesByPlayer.get(singlePlayer));
-                continue;
-            }
-
-            // ---------------------------------------------------------
-            // PHASE 4: TIE-BREAKERS & CASUALTIES
-            // ---------------------------------------------------------
-            // Sort players by army size (Descending)
-            List<Map.Entry<String, Integer>> sortedForces = new ArrayList<>(forcesByPlayer.entrySet());
-            sortedForces.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
-
-            var firstPlace = sortedForces.get(0);
-            var secondPlace = sortedForces.get(1);
-
-            if (firstPlace.getValue().equals(secondPlace.getValue())) {
-                // It's a Tie!
-                String originalOwner = p.getOwnerId();
-
-                if (forcesByPlayer.containsKey(originalOwner) && forcesByPlayer.get(originalOwner).equals(firstPlace.getValue())) {
-                    // Defender tied for first place. Defender's Advantage wins with 1 survivor.
-                    p.setArmyCount(1);
-                    // Owner remains the same
-                } else {
-                    // Mutual destruction between attackers, or nobody owned it to begin with.
-                    p.setOwnerId(null);
-                    p.setArmyCount(0);
-                }
+                description = "Reinforced / Peaceful move";
             } else {
-                // Clear Winner
-                p.setOwnerId(firstPlace.getKey());
-                // Winner loses troops equal to the second-largest army
-                p.setArmyCount(firstPlace.getValue() - secondPlace.getValue());
+                List<Map.Entry<String, Integer>> sortedForces = new ArrayList<>(forcesByPlayer.entrySet());
+                sortedForces.sort((e1, e2) -> e2.getValue().compareTo(e1.getValue()));
+
+                var firstPlace = sortedForces.get(0);
+                var secondPlace = sortedForces.get(1);
+
+                if (firstPlace.getValue().equals(secondPlace.getValue())) {
+                    String originalOwner = p.getOwnerId();
+                    if (forcesByPlayer.containsKey(originalOwner) && forcesByPlayer.get(originalOwner).equals(firstPlace.getValue())) {
+                        p.setArmyCount(1);
+                        description = "Defender tied for victory. Held with 1 troop.";
+                    } else {
+                        p.setOwnerId(null);
+                        p.setArmyCount(0);
+                        description = "Mutual destruction. Province is now neutral.";
+                    }
+                } else {
+                    p.setOwnerId(firstPlace.getKey());
+                    p.setArmyCount(firstPlace.getValue() - secondPlace.getValue());
+                    description = "Conquered by " + firstPlace.getKey();
+                }
             }
+
+            results.add(new ResolutionResult(
+                p.getId(),
+                p.getOwnerId(),
+                p.getArmyCount(),
+                involvedPlayers,
+                description
+            ));
         }
 
-        // ---------------------------------------------------------
-        // CLEANUP
-        // ---------------------------------------------------------
         state.clearQueuedMoves();
         state.resetReadyStates();
+        return results;
     }
 }

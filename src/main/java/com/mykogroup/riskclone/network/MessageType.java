@@ -11,6 +11,7 @@ public final class MessageType {
     public static final String DRAFT_REQUEST  = "DRAFT_REQUEST";
     public static final String MOVE_REQUEST   = "MOVE_REQUEST";
     public static final String END_TURN       = "END_TURN";
+    public static final String UPDATE_AVATAR  = "UPDATE_AVATAR";
     public static final String KICK_PLAYER    = "KICK_PLAYER";
 
     // Server → Client(s)

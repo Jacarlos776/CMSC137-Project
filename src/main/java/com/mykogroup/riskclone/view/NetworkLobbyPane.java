@@ -1,234 +1,390 @@
 package com.mykogroup.riskclone.view;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mykogroup.riskclone.Main;
 import com.mykogroup.riskclone.network.GameClient;
 import com.mykogroup.riskclone.network.GameClientListener;
-import com.mykogroup.riskclone.network.LobbyPlayer;
+import com.mykogroup.riskclone.model.LobbyPlayer;
 import com.mykogroup.riskclone.network.MessageType;
 import com.mykogroup.riskclone.network.NetworkMessage;
+import com.mykogroup.riskclone.network.LobbyCodeConverter;
 import com.mykogroup.riskclone.network.payload.*;
 import javafx.application.Platform;
+import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
+import javafx.stage.Modality;
+import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 
 import java.util.List;
 
-// JavaFX lobby pane used for both hosting and joining.
-// Layout: Title | connection info | scrollable player list | bottom bar (Add AI, Start, Leave)
-// Implements GameClientListener so it can react to server events via Platform.runLater.
-public class NetworkLobbyPane extends VBox implements GameClientListener {
+public class NetworkLobbyPane extends StackPane implements GameClientListener {
 
-    // --- State ---
-    private GameClient client;   // set after construction via setClient()
+    private GameClient client;
     private final boolean isHost;
+    private final String serverIp;
+    private final int port;
     private String localPlayerId;
-    private final Runnable onGameStart;  // called when GAME_START arrives
-    private final Runnable onLeave;      // called when Leave is clicked
+    private final Runnable onGameStart;
+    private final Runnable onLeave;
+    private final ObjectMapper mapper = new ObjectMapper();
 
-    private final Label connectionInfoLabel = new Label("Connecting…");
-    private final VBox playerListBox        = new VBox(10);
-    private final Button startGameBtn       = new Button("Start Game");
-    private final Button addAiBtn           = new Button("+ Add AI");
-    private final ObjectMapper mapper       = new ObjectMapper();
+    private final GridPane playerGrid = new GridPane();
+    private final Label lobbyCodeLabel = new Label("CODE: ------");
+    private final Button startGameBtn = new Button("");
+    private final Button addAiBtn = new Button("");
 
-    // isHost: true if this process is also running GameServer
-    // serverIp: LAN IP to display (host shows it; client shows the address they joined)
+    private boolean detailsPrompted = false;
+
     public NetworkLobbyPane(boolean isHost, String serverIp, int port,
-                             Runnable onGameStart, Runnable onLeave) {
-        this.isHost      = isHost;
+            Runnable onGameStart, Runnable onLeave) {
+        this.isHost = isHost;
+        this.serverIp = serverIp;
+        this.port = port;
         this.onGameStart = onGameStart;
-        this.onLeave     = onLeave;
+        this.onLeave = onLeave;
 
-        setSpacing(20);
-        setAlignment(Pos.CENTER);
-        setStyle("-fx-background-color: #1e2235; -fx-padding: 40;");
-
-        // Title
-        Label title = new Label("LAN Multiplayer");
-        title.setFont(Font.font("System", FontWeight.BOLD, 36));
-        title.setTextFill(Color.WHITE);
-
-        // Connection info
-        if (isHost) {
-            connectionInfoLabel.setText("Your IP: " + serverIp + "   Port: " + port
-                    + "   (Share this with other players)");
-        } else {
-            connectionInfoLabel.setText("Connected to " + serverIp + ":" + port);
+        // Background
+        try {
+            ImageView bgView = new ImageView(
+                    new Image(getClass().getResourceAsStream("/com/mykogroup/riskclone/assets/socket-lobby-bg.png")));
+            bgView.setFitWidth(1280);
+            bgView.setFitHeight(720);
+            getChildren().add(bgView);
+        } catch (Exception e) {
+            setStyle("-fx-background-color: #3d2b1f;");
         }
-        connectionInfoLabel.setTextFill(Color.web("#94a3b8"));
-        connectionInfoLabel.setFont(Font.font(14));
 
-        // Player list scroll area
-        ScrollPane scroll = new ScrollPane(playerListBox);
-        scroll.setFitToWidth(true);
-        scroll.setPrefHeight(280);
-        scroll.setStyle("-fx-background: #13161f; -fx-background-color: #13161f;");
-        playerListBox.setStyle("-fx-padding: 10;");
+        VBox content = new VBox(40);
+        content.setAlignment(Pos.CENTER);
+        content.setPadding(new Insets(120, 0, 0, 0));
 
-        // Bottom bar
-        addAiBtn.setStyle("-fx-font-size: 13px; -fx-background-color: #4a5568; -fx-text-fill: white; -fx-padding: 6 16;");
-        addAiBtn.setVisible(isHost);
-        addAiBtn.setManaged(isHost);
-        addAiBtn.setOnAction(e -> sendAsync(build(MessageType.ADD_AI, null)));
+        // Player Grid
+        playerGrid.setHgap(30);
+        playerGrid.setVgap(20);
+        playerGrid.setAlignment(Pos.CENTER);
 
-        startGameBtn.setStyle("-fx-font-size: 16px; -fx-font-weight: bold; -fx-background-color: #27ae60; -fx-text-fill: white; -fx-padding: 8 24;");
-        startGameBtn.setVisible(isHost);
-        startGameBtn.setManaged(isHost);
-        startGameBtn.setDisable(true); // enabled once >= 4 players
-        startGameBtn.setOnAction(e -> {
-            startGameBtn.setDisable(true); // prevent double-click while server responds
-            sendAsync(build(MessageType.START_GAME, null));
+        content.getChildren().addAll(playerGrid);
+        getChildren().add(content);
+
+        // Lobby Code (Bottom section)
+        String code = LobbyCodeConverter.encode(serverIp, port);
+        lobbyCodeLabel.setText(code);
+        lobbyCodeLabel.setTextFill(Color.WHITE);
+        if (Main.BODY_FONT != null)
+            lobbyCodeLabel.setFont(Font.font(Main.BODY_FONT.getFamily(), FontWeight.BLACK, 34));
+        else
+            lobbyCodeLabel.setFont(Font.font("System", FontWeight.BOLD, 34));
+
+        StackPane.setAlignment(lobbyCodeLabel, Pos.BOTTOM_CENTER);
+        StackPane.setMargin(lobbyCodeLabel, new Insets(0, 0, 33, 140)); // Move slightly lower and right
+        getChildren().add(lobbyCodeLabel);
+
+        // Buttons
+        if (isHost) {
+            // Add AI Button (Bottom Left)
+            try {
+                ImageView aiIv = new ImageView(
+                        new Image(getClass().getResourceAsStream("/com/mykogroup/riskclone/assets/add-bot-btn.png")));
+                aiIv.setFitWidth(180);
+                aiIv.setFitHeight(60);
+                addAiBtn.setGraphic(aiIv);
+                addAiBtn.setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+            } catch (Exception e) {
+                addAiBtn.setStyle(
+                        "-fx-background-color: #4a5568; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 30;");
+            }
+            addAiBtn.setOnAction(e -> sendAsync(build(MessageType.ADD_AI, null)));
+            Main.addHoverEffect(addAiBtn);
+            StackPane.setAlignment(addAiBtn, Pos.BOTTOM_LEFT);
+            StackPane.setMargin(addAiBtn, new Insets(0, 0, 40, 50));
+            getChildren().add(addAiBtn);
+
+            // Play Button (Center Right)
+            try {
+                ImageView playIv = new ImageView(
+                        new Image(getClass().getResourceAsStream("/com/mykogroup/riskclone/assets/play-btn.png")));
+                playIv.setFitWidth(100);
+                playIv.setFitHeight(150);
+                startGameBtn.setGraphic(playIv);
+                startGameBtn.setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+            } catch (Exception e) {
+                startGameBtn.setStyle(
+                        "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 30;");
+            }
+            startGameBtn.setDisable(true);
+            startGameBtn.setOnAction(e -> sendAsync(build(MessageType.START_GAME, null)));
+            Main.addHoverEffect(startGameBtn);
+            StackPane.setAlignment(startGameBtn, Pos.CENTER_RIGHT);
+            StackPane.setMargin(startGameBtn, new Insets(0, 0, 0, 0));
+            getChildren().add(startGameBtn);
+        }
+
+        // Back Button
+        Button backBtn = new Button("");
+        try {
+            ImageView iv = new ImageView(
+                    new Image(getClass().getResourceAsStream("/com/mykogroup/riskclone/assets/main-menu-btn.png")));
+            iv.setFitWidth(160);
+            iv.setFitHeight(45);
+
+            StackPane btnContent = new StackPane();
+            Label lbl = new Label("BUMALIK");
+            lbl.setTextFill(Color.WHITE);
+            if (Main.HEADER_FONT != null)
+                lbl.setFont(Font.font(Main.HEADER_FONT.getFamily(), 20));
+            else
+                lbl.setFont(Font.font("System", FontWeight.BOLD, 20));
+
+            btnContent.getChildren().addAll(iv, lbl);
+            backBtn.setGraphic(btnContent);
+            backBtn.setStyle("-fx-background-color: transparent; -fx-padding: 0;");
+        } catch (Exception e) {
+            backBtn.setStyle(
+                    "-fx-background-color: #ef4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20;");
+        }
+        backBtn.setOnAction(e -> {
+            if (client != null)
+                client.disconnect();
+            onLeave.run();
         });
-
-        Button leaveBtn = new Button("Leave");
-        leaveBtn.setStyle("-fx-font-size: 13px; -fx-background-color: #ef4444; -fx-text-fill: white; -fx-padding: 6 16;");
-        leaveBtn.setOnAction(e -> { if (client != null) client.disconnect(); if (onLeave != null) onLeave.run(); });
-
-        HBox bottomBar = new HBox(12, addAiBtn, startGameBtn, leaveBtn);
-        bottomBar.setAlignment(Pos.CENTER);
-
-        getChildren().addAll(title, connectionInfoLabel, scroll, bottomBar);
+        StackPane.setAlignment(backBtn, Pos.TOP_LEFT);
+        StackPane.setMargin(backBtn, new Insets(45, 0, 0, 45));
+        Main.addHoverEffect(backBtn);
+        getChildren().add(backBtn);
     }
 
-    // Set after construction to break the circular dependency with GameClient
-    public void setClient(GameClient client) { this.client = client; }
+    public void setClient(GameClient client) {
+        this.client = client;
+    }
 
-    public void setLocalPlayerId(String pid) { this.localPlayerId = pid; }
+    public void setLocalPlayerId(String pid) {
+        this.localPlayerId = pid;
+    }
 
-    // --- GameClientListener ---
+    private void showDetailsModal() {
+        detailsPrompted = true;
+        Stage modal = new Stage(StageStyle.TRANSPARENT);
+        modal.initModality(Modality.APPLICATION_MODAL);
 
-    @Override public void onJoinAck(String assignedPlayerId) {
+        VBox root = new VBox(25);
+        root.setPadding(new Insets(35));
+        root.setStyle(
+                "-fx-background-color: #3d2b1f; -fx-border-color: #d4af37; -fx-border-width: 4; -fx-background-radius: 20; -fx-border-radius: 20;");
+        root.setAlignment(Pos.CENTER);
+
+        Label title = new Label("SINO KA?");
+        if (Main.HEADER_FONT != null)
+            title.setFont(Main.HEADER_FONT);
+        else
+            title.setFont(Font.font("System", FontWeight.BOLD, 28));
+        title.setTextFill(Color.web("#d4af37"));
+
+        TextField nameField = new TextField("Datu " + (int) (Math.random() * 100));
+        nameField.setPromptText("Ilagay ang Pangalan");
+        nameField.setStyle(
+                "-fx-font-size: 18px; -fx-background-color: #2c1e14; -fx-text-fill: white; -fx-border-color: #5d4037;");
+        if (Main.BODY_FONT != null)
+            nameField.setFont(Main.BODY_FONT);
+
+        // Avatar Picker
+        Label avatarLabel = new Label("Pumili ng Avatar:");
+        avatarLabel.setTextFill(Color.WHITE);
+        if (Main.BODY_FONT != null)
+            avatarLabel.setFont(Main.BODY_FONT);
+
+        HBox avatarBox = new HBox(10);
+        avatarBox.setAlignment(Pos.CENTER);
+        String[] selectedAvatar = { "/com/mykogroup/riskclone/assets/Avatar1.png" };
+        for (int i = 1; i <= 6; i++) {
+            String path = "/com/mykogroup/riskclone/assets/Avatar" + i + ".png";
+            ImageView iv = new ImageView(new Image(getClass().getResourceAsStream(path)));
+            iv.setFitWidth(50);
+            iv.setFitHeight(50);
+
+            Button aBtn = new Button();
+            aBtn.setGraphic(iv);
+            aBtn.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-border-width: 2;");
+            aBtn.setOnAction(e -> {
+                selectedAvatar[0] = path;
+                avatarBox.getChildren().forEach(n -> n.setStyle(
+                        "-fx-background-color: transparent; -fx-border-color: transparent; -fx-border-width: 2;"));
+                aBtn.setStyle(
+                        "-fx-background-color: rgba(212, 175, 55, 0.3); -fx-border-color: #d4af37; -fx-border-width: 2;");
+            });
+            if (i == 1)
+                aBtn.setStyle(
+                        "-fx-background-color: rgba(212, 175, 55, 0.3); -fx-border-color: #d4af37; -fx-border-width: 2;");
+            avatarBox.getChildren().add(aBtn);
+            Main.addHoverEffect(aBtn);
+        }
+
+        // Color Picker
+        Label colorLabel = new Label("Pumili ng Kulay:");
+        colorLabel.setTextFill(Color.WHITE);
+        if (Main.BODY_FONT != null)
+            colorLabel.setFont(Main.BODY_FONT);
+
+        HBox colorBox = new HBox(10);
+        colorBox.setAlignment(Pos.CENTER);
+        String[] colors = { "#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899" };
+        String[] selectedColor = { colors[0] };
+        for (String hex : colors) {
+            Button cBtn = new Button();
+            cBtn.setPrefSize(35, 35);
+            cBtn.setStyle("-fx-background-color: " + hex
+                    + "; -fx-border-color: transparent; -fx-border-width: 2; -fx-background-radius: 50%; -fx-border-radius: 50%;");
+            cBtn.setOnAction(e -> {
+                selectedColor[0] = hex;
+                colorBox.getChildren().forEach(n -> n.setStyle(
+                        n.getStyle().replace("-fx-border-color: #d4af37;", "-fx-border-color: transparent;")));
+                cBtn.setStyle(cBtn.getStyle().replace("-fx-border-color: transparent;", "-fx-border-color: #d4af37;"));
+            });
+            if (hex.equals(colors[0]))
+                cBtn.setStyle(cBtn.getStyle().replace("-fx-border-color: transparent;", "-fx-border-color: #d4af37;"));
+            colorBox.getChildren().add(cBtn);
+            Main.addHoverEffect(cBtn);
+        }
+
+        Label errorLabel = new Label("");
+        errorLabel.setTextFill(Color.web("#ef4444"));
+        errorLabel.setFont(Font.font(14));
+
+        Button okBtn = new Button("HANDA NA");
+        okBtn.setStyle(
+                "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 40; -fx-background-radius: 5;");
+        if (Main.BODY_FONT != null)
+            okBtn.setFont(Main.BODY_FONT);
+        okBtn.setOnAction(e -> {
+            String name = nameField.getText().trim();
+            if (name.isEmpty()) {
+                errorLabel.setText("Ilagay ang pangalan!");
+                nameField.setStyle(
+                        "-fx-font-size: 18px; -fx-background-color: #2c1e14; -fx-text-fill: white; -fx-border-color: #ef4444; -fx-border-width: 2;");
+                return;
+            }
+
+            sendAsync(build(MessageType.UPDATE_NAME, new UpdateNamePayload(name)));
+            sendAsync(build(MessageType.UPDATE_COLOR, new UpdateColorPayload(selectedColor[0])));
+            sendAsync(build(MessageType.UPDATE_AVATAR, new UpdateAvatarPayload(selectedAvatar[0])));
+
+            modal.close();
+        });
+        Main.addHoverEffect(okBtn);
+
+        Button cancelBtn = new Button("I-cancel");
+        cancelBtn.setStyle(
+                "-fx-background-color: #ef4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 40; -fx-background-radius: 5;");
+        if (Main.BODY_FONT != null)
+            cancelBtn.setFont(Main.BODY_FONT);
+        cancelBtn.setOnAction(e -> {
+            modal.close();
+            if (client != null)
+                client.disconnect();
+            onLeave.run();
+        });
+        Main.addHoverEffect(cancelBtn);
+
+        HBox actions = new HBox(20, cancelBtn, okBtn);
+        actions.setAlignment(Pos.CENTER);
+
+        root.getChildren().addAll(title, nameField, errorLabel, avatarLabel, avatarBox, colorLabel, colorBox, actions);
+        modal.setScene(new Scene(root, Color.TRANSPARENT));
+        modal.showAndWait();
+    }
+
+    @Override
+    public void onJoinAck(String assignedPlayerId) {
         this.localPlayerId = assignedPlayerId;
+        if (!detailsPrompted) {
+            Platform.runLater(this::showDetailsModal);
+        }
     }
 
-    @Override public void onLobbyUpdate(LobbyUpdatePayload payload) {
-        System.out.println("[lobby] onLobbyUpdate: " + (payload.players == null ? "null" : payload.players.size()) + " players");
+    @Override
+    public void onLobbyUpdate(LobbyUpdatePayload payload) {
+        Platform.runLater(() -> refreshPlayerList(payload.players));
+    }
+
+    @Override
+    public void onGameStart(GameStartPayload payload) {
+        Platform.runLater(onGameStart);
+    }
+
+    @Override
+    public void onStateUpdate(StateUpdatePayload p) {
+    }
+
+    @Override
+    public void onGameOver(GameOverPayload p) {
+    }
+
+    @Override
+    public void onPlayerDisconnected(String pid) {
+    }
+
+    @Override
+    public void onError(String message) {
         Platform.runLater(() -> {
-            try {
-                refreshPlayerList(payload.players);
-            } catch (Exception e) {
-                e.printStackTrace();
-                connectionInfoLabel.setText("UI error: " + e.getMessage());
-            }
+            Alert a = new Alert(Alert.AlertType.ERROR, message);
+            a.show();
         });
     }
 
-    @Override public void onGameStart(GameStartPayload payload) {
-        System.out.println("[lobby] onGameStart received");
-        Platform.runLater(() -> {
-            try {
-                if (onGameStart != null) onGameStart.run();
-            } catch (Exception e) {
-                e.printStackTrace();
-                connectionInfoLabel.setText("Start error: " + e.getMessage());
-            }
-        });
+    @Override
+    public void onDisconnected() {
+        Platform.runLater(onLeave);
     }
-
-    @Override public void onStateUpdate(StateUpdatePayload p) {}
-    @Override public void onGameOver(GameOverPayload p) {}
-    @Override public void onPlayerDisconnected(String pid) {}
-    @Override public void onError(String message) {
-        Platform.runLater(() -> connectionInfoLabel.setText("Error: " + message));
-    }
-    @Override public void onDisconnected() {
-        Platform.runLater(() -> connectionInfoLabel.setText("Disconnected from server"));
-    }
-
-    // --- private ---
 
     private void refreshPlayerList(List<LobbyPlayer> players) {
-        playerListBox.getChildren().clear();
-        for (LobbyPlayer lp : players) {
-            playerListBox.getChildren().add(buildPlayerRow(lp));
+        playerGrid.getChildren().clear();
+        for (int i = 0; i < 8; i++) {
+            LobbyPlayer lp = (i < players.size()) ? players.get(i) : null;
+            final int index = i;
+
+            com.mykogroup.riskclone.model.LobbyPlayer modelPlayer = null;
+            boolean isLpHost = false;
+            if (lp != null) {
+                modelPlayer = new com.mykogroup.riskclone.model.LobbyPlayer(
+                        lp.playerId,
+                        lp.displayName,
+                        lp.color,
+                        lp.isAi,
+                        lp.avatarPath != null ? lp.avatarPath : "/com/mykogroup/riskclone/assets/Avatar1.png");
+                // First player in list is host (server logic ensures this)
+                if (index == 0)
+                    isLpHost = true;
+            }
+
+            // X button only for AI players in network lobby
+            Runnable kickAction = null;
+            if (isHost && lp != null && lp.isAi) {
+                kickAction = () -> sendAsync(build(MessageType.KICK_PLAYER, new KickPlayerPayload(lp.playerId)));
+            }
+
+            PlayerCard card = new PlayerCard(modelPlayer, isLpHost, kickAction);
+
+            playerGrid.add(card, i % 2, i / 2);
         }
-        // Enable Start only when >= 4 players (host only; server enforces this too)
-        startGameBtn.setDisable(players.size() < 4);
+        if (isHost)
+            startGameBtn.setDisable(players.size() < 4);
     }
 
-    private HBox buildPlayerRow(LobbyPlayer lp) {
-        HBox row = new HBox(12);
-        row.setAlignment(Pos.CENTER_LEFT);
-        row.setStyle("-fx-background-color: #2a2d3e; -fx-padding: 8 12; -fx-background-radius: 6;");
-
-        // Colour dot
-        javafx.scene.shape.Circle dot = new javafx.scene.shape.Circle(7);
-        dot.setFill(Color.web(lp.color != null ? lp.color : "#888888"));
-
-        // Own row gets editable name + colour picker; others are read-only
-        boolean isOwnRow = lp.playerId.equals(localPlayerId);
-        if (isOwnRow && !lp.isAi) {
-            // Capture the server-supplied name so focus-loss during a list
-            // refresh (which removes this field from the scene) doesn't echo
-            // an UPDATE_NAME back and trigger a LOBBY_UPDATE loop.
-            final String originalName = lp.displayName == null ? "" : lp.displayName;
-            TextField nameField = new TextField(originalName);
-            nameField.setStyle("-fx-font-size: 14px;");
-            Runnable maybeSendName = () -> {
-                String current = nameField.getText();
-                if (current != null && !current.equals(originalName)) {
-                    sendAsync(build(MessageType.UPDATE_NAME, new UpdateNamePayload(current)));
-                }
-            };
-            nameField.setOnAction(e -> maybeSendName.run());
-            nameField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
-                if (!isFocused) maybeSendName.run();
-            });
-
-            ColorPicker cp = new ColorPicker(Color.web(lp.color != null ? lp.color : "#ef4444"));
-            cp.setStyle("-fx-font-size: 12px;");
-            cp.setOnAction(e -> {
-                String hex = toHex(cp.getValue());
-                dot.setFill(Color.web(hex));
-                sendAsync(build(MessageType.UPDATE_COLOR, new UpdateColorPayload(hex)));
-            });
-
-            row.getChildren().addAll(dot, nameField, cp);
-        } else {
-            Label nameLabel = new Label(lp.displayName + (lp.isAi ? "  🤖" : ""));
-            nameLabel.setTextFill(Color.web(isOwnRow ? "#fbbf24" : "#e2e8f0"));
-            nameLabel.setFont(Font.font(14));
-            row.getChildren().addAll(dot, nameLabel);
-        }
-
-        // Host kick button — appears on every row except the host's own.
-        if (isHost && !isOwnRow) {
-            Region spacer = new Region();
-            HBox.setHgrow(spacer, Priority.ALWAYS);
-            Button kickBtn = new Button("X");
-            kickBtn.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; "
-                    + "-fx-background-color: #ef4444; -fx-text-fill: white; "
-                    + "-fx-padding: 2 8; -fx-background-radius: 4;");
-            kickBtn.setTooltip(new Tooltip(lp.isAi ? "Remove AI" : "Kick player"));
-            kickBtn.setOnAction(e -> sendAsync(
-                    build(MessageType.KICK_PLAYER, new KickPlayerPayload(lp.playerId))));
-            row.getChildren().addAll(spacer, kickBtn);
-        }
-        return row;
-    }
-
-    // Build a message on the calling thread, then send it on a daemon thread
-    // so the FX thread is never blocked by socket I/O.
     private void sendAsync(NetworkMessage msg) {
-        if (client == null) return;
-        Thread t = new Thread(() -> client.send(msg), "lobby-send");
-        t.setDaemon(true);
-        t.start();
+        if (client == null)
+            return;
+        new Thread(() -> client.send(msg)).start();
     }
 
     private NetworkMessage build(String type, Object payload) {
-        com.fasterxml.jackson.databind.node.ObjectNode node = (payload == null)
-                ? mapper.createObjectNode()
-                : mapper.valueToTree(payload);
-        return new NetworkMessage(type, localPlayerId, node);
-    }
-
-    private static String toHex(Color c) {
-        return String.format("#%02x%02x%02x",
-                (int)(c.getRed()*255), (int)(c.getGreen()*255), (int)(c.getBlue()*255));
+        return new NetworkMessage(type, localPlayerId, mapper.valueToTree(payload));
     }
 }

@@ -4,7 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mykogroup.riskclone.network.payload.JoinPayload;
 import com.mykogroup.riskclone.network.payload.LobbyUpdatePayload;
 import com.mykogroup.riskclone.network.payload.StateUpdatePayload;
-import com.mykogroup.riskclone.network.LobbyPlayer;
+import com.mykogroup.riskclone.model.LobbyPlayer;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.mykogroup.riskclone.model.GameState;
 import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
@@ -48,7 +49,7 @@ public class NetworkMessageTest {
 
     @Test
     void networkMessage_withLobbyUpdatePayload_roundTrips() throws Exception {
-        LobbyPlayer lp = new LobbyPlayer("player1", "Alice", "#ef4444", false);
+        LobbyPlayer lp = new LobbyPlayer("player1", "Alice", "#ef4444", false, "/avatar.png");
         LobbyUpdatePayload lobby = new LobbyUpdatePayload(java.util.List.of(lp));
         NetworkMessage msg = new NetworkMessage(
                 MessageType.LOBBY_UPDATE, null, mapper.valueToTree(lobby));

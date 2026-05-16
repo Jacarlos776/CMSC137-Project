@@ -1,29 +1,23 @@
 package com.mykogroup.riskclone.model;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.io.Serializable;
 
 public class LobbyPlayer implements Serializable {
-    private String name;
-    private String avatarPath;
-    private String colorHex;
-    private boolean isAi;
+    public String playerId;
+    public String displayName;
+    public String color;
+    @JsonProperty("isAi")
+    public boolean isAi;
+    public String avatarPath;
 
-    public LobbyPlayer(String name, String avatarPath, String colorHex, boolean isAi) {
-        this.name = name;
-        this.avatarPath = avatarPath;
-        this.colorHex = colorHex;
+    public LobbyPlayer() {}
+
+    public LobbyPlayer(String playerId, String displayName, String color, boolean isAi, String avatarPath) {
+        this.playerId = playerId;
+        this.displayName = displayName;
+        this.color = color;
         this.isAi = isAi;
+        this.avatarPath = avatarPath;
     }
-
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-
-    public String getAvatarPath() { return avatarPath; }
-    public void setAvatarPath(String avatarPath) { this.avatarPath = avatarPath; }
-
-    public String getColorHex() { return colorHex; }
-    public void setColorHex(String colorHex) { this.colorHex = colorHex; }
-
-    public boolean isAi() { return isAi; }
-    public void setAi(boolean ai) { isAi = ai; }
 }

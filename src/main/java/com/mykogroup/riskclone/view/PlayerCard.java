@@ -17,7 +17,7 @@ public class PlayerCard extends StackPane {
     private static final double CARD_WIDTH = 340;
     private static final double CARD_HEIGHT = 80;
 
-    public PlayerCard(LobbyPlayer player, Runnable onDelete) {
+    public PlayerCard(LobbyPlayer player, boolean isHost, Runnable onDelete) {
         setPrefSize(CARD_WIDTH, CARD_HEIGHT);
         setMaxSize(CARD_WIDTH, CARD_HEIGHT);
 
@@ -41,10 +41,10 @@ public class PlayerCard extends StackPane {
             // Avatar Container
             StackPane avatarContainer = new StackPane();
             Circle colorCircle = new Circle(28);
-            colorCircle.setFill(Color.web(player.getColorHex()));
+            colorCircle.setFill(Color.web(player.color));
             
             try {
-                ImageView avatarView = new ImageView(new Image(getClass().getResourceAsStream(player.getAvatarPath())));
+                ImageView avatarView = new ImageView(new Image(getClass().getResourceAsStream(player.avatarPath)));
                 avatarView.setFitWidth(50);
                 avatarView.setFitHeight(50);
                 Circle clip = new Circle(25, 25, 25);
@@ -57,14 +57,27 @@ public class PlayerCard extends StackPane {
             AnchorPane.setLeftAnchor(avatarContainer, 20.0);
             AnchorPane.setTopAnchor(avatarContainer, (CARD_HEIGHT - 56) / 2.0);
 
+            // Host Badge
+            if (isHost) {
+                Label hostBadge = new Label("DATU");
+                hostBadge.setStyle("-fx-background-color: #f59e0b; -fx-text-fill: black; -fx-font-weight: bold; -fx-font-size: 10px; -fx-padding: 2 5; -fx-background-radius: 3;");
+                if (Main.BODY_FONT != null) hostBadge.setFont(Font.font(Main.BODY_FONT.getFamily(), FontWeight.BOLD, 10));
+                
+                AnchorPane.setRightAnchor(hostBadge, 10.0);
+                AnchorPane.setBottomAnchor(hostBadge, 5.0);
+                content.getChildren().add(hostBadge);
+            }
+
             // Name Label
-            Label nameLabel = new Label(player.getName());
-            if (Main.HEADER_FONT != null) nameLabel.setFont(Font.font(Main.HEADER_FONT.getFamily(), 22));
-            else nameLabel.setFont(Font.font("System", FontWeight.BOLD, 22));
+            Label nameLabel = new Label(player.displayName);
+            if (Main.HEADER_FONT != null) nameLabel.setFont(Font.font(Main.HEADER_FONT.getFamily(), 28));
+            else nameLabel.setFont(Font.font("System", FontWeight.BOLD, 28));
             nameLabel.setTextFill(Color.WHITE);
+            nameLabel.setAlignment(Pos.CENTER);
             
-            AnchorPane.setLeftAnchor(nameLabel, 90.0);
-            AnchorPane.setTopAnchor(nameLabel, (CARD_HEIGHT - 32) / 2.0);
+            AnchorPane.setLeftAnchor(nameLabel, 0.0);
+            AnchorPane.setRightAnchor(nameLabel, 0.0);
+            AnchorPane.setTopAnchor(nameLabel, (CARD_HEIGHT - 40) / 2.0);
 
             // Delete Button (Circle with X)
             StackPane deleteBtn = new StackPane();
@@ -80,10 +93,23 @@ public class PlayerCard extends StackPane {
                 if (onDelete != null) onDelete.run();
             });
             
+            // Hover effect for delete button
+            deleteBtn.setOnMouseEntered(e -> {
+                deleteCircle.setRadius(14);
+                deleteBtn.setScaleX(1.1);
+                deleteBtn.setScaleY(1.1);
+            });
+            deleteBtn.setOnMouseExited(e -> {
+                deleteCircle.setRadius(12);
+                deleteBtn.setScaleX(1.0);
+                deleteBtn.setScaleY(1.0);
+            });
+            
             AnchorPane.setRightAnchor(deleteBtn, 8.0);
             AnchorPane.setTopAnchor(deleteBtn, 8.0);
 
-            content.getChildren().addAll(avatarContainer, nameLabel, deleteBtn);
+            content.getChildren().addAll(avatarContainer, nameLabel);
+            if (onDelete != null) content.getChildren().add(deleteBtn);
             getChildren().add(content);
         }
     }

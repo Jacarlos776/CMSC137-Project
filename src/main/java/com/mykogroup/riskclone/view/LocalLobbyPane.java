@@ -45,7 +45,8 @@ public class LocalLobbyPane extends StackPane {
 
         // Background
         try {
-            ImageView bgView = new ImageView(new Image(getClass().getResourceAsStream("/com/mykogroup/riskclone/assets/local-lobby-bg.png")));
+            ImageView bgView = new ImageView(
+                    new Image(getClass().getResourceAsStream("/com/mykogroup/riskclone/assets/local-lobby-bg.png")));
             bgView.setFitWidth(1280);
             bgView.setFitHeight(720);
             getChildren().add(bgView);
@@ -69,9 +70,11 @@ public class LocalLobbyPane extends StackPane {
 
         Button addPlayerBtn = createIconButton("/com/mykogroup/riskclone/assets/add-player-btn.png", 220, 60);
         addPlayerBtn.setOnAction(e -> showAddPlayerModal(false));
+        Main.addHoverEffect(addPlayerBtn);
 
         Button addBotBtn = createIconButton("/com/mykogroup/riskclone/assets/add-bot-btn.png", 220, 60);
         addBotBtn.setOnAction(e -> addBot());
+        Main.addHoverEffect(addBotBtn);
 
         addButtons.getChildren().addAll(addPlayerBtn, addBotBtn);
 
@@ -83,36 +86,43 @@ public class LocalLobbyPane extends StackPane {
         playBtn.setTranslateX(0); // Move against the edge
         playBtn.setOnAction(e -> {
             if (players.size() >= 4) {
-                if (onStart != null) onStart.run();
+                if (onStart != null)
+                    onStart.run();
             } else {
                 Alert alert = new Alert(Alert.AlertType.WARNING, "Minimum of 4 players required to start!");
                 alert.show();
             }
         });
+        Main.addHoverEffect(playBtn);
 
         // Back Button
-        Button backBtn = new Button("BACK");
+        Button backBtn = new Button("");
         try {
-            String btnImgPath = getClass().getResource("/com/mykogroup/riskclone/assets/main-menu-btn.png").toExternalForm();
-            backBtn.setStyle("-fx-background-image: url('" + btnImgPath + "'); " +
-                             "-fx-background-size: 100% 100%; " +
-                             "-fx-background-color: transparent; " +
-                             "-fx-min-width: 140px; -fx-min-height: 40px; " +
-                             "-fx-max-width: 140px; -fx-max-height: 40px; " +
-                             "-fx-text-fill: white; " +
-                             "-fx-alignment: center; " +
-                             "-fx-padding: 0 0 5 0; " +
-                             "-fx-cursor: hand;");
+            ImageView iv = new ImageView(
+                    new Image(getClass().getResourceAsStream("/com/mykogroup/riskclone/assets/main-menu-btn.png")));
+            iv.setFitWidth(160);
+            iv.setFitHeight(45);
+
+            StackPane btnContent = new StackPane();
+            Label lbl = new Label("BUMALIK");
+            lbl.setTextFill(Color.WHITE);
+            if (Main.HEADER_FONT != null)
+                lbl.setFont(Font.font(Main.HEADER_FONT.getFamily(), 20));
+            else
+                lbl.setFont(Font.font("System", FontWeight.BOLD, 20));
+
+            btnContent.getChildren().addAll(iv, lbl);
+            backBtn.setGraphic(btnContent);
+            backBtn.setStyle("-fx-background-color: transparent; -fx-padding: 0;");
         } catch (Exception e) {
-            backBtn.setStyle("-fx-background-color: #ef4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20;");
+            backBtn.setStyle(
+                    "-fx-background-color: #ef4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 20;");
         }
-        
-        if (Main.HEADER_FONT != null) backBtn.setFont(Font.font(Main.HEADER_FONT.getFamily(), 18));
-        else if (Main.BODY_FONT != null) backBtn.setFont(Font.font(Main.BODY_FONT.getFamily(), FontWeight.BOLD, 16));
-        
+
         backBtn.setOnAction(e -> onBack.run());
         StackPane.setAlignment(backBtn, Pos.TOP_LEFT);
-        StackPane.setMargin(backBtn, new Insets(20));
+        StackPane.setMargin(backBtn, new Insets(45, 0, 0, 45));
+        Main.addHoverEffect(backBtn);
 
         getChildren().addAll(content, playBtn, backBtn);
     }
@@ -122,14 +132,15 @@ public class LocalLobbyPane extends StackPane {
     }
 
     private void addBot() {
-        if (players.size() >= 8) return;
-        
+        if (players.size() >= 8)
+            return;
+
         Random rand = new Random();
         String name = AI_NAMES[rand.nextInt(AI_NAMES.length)];
         String avatar = "/com/mykogroup/riskclone/assets/Avatar" + (rand.nextInt(6) + 1) + ".png";
-        
+
         // Find first available color
-        List<String> takenColors = players.stream().map(LobbyPlayer::getColorHex).collect(Collectors.toList());
+        List<String> takenColors = players.stream().map(p -> p.color).collect(Collectors.toList());
         String color = DEFAULT_COLORS[0];
         for (String c : DEFAULT_COLORS) {
             if (!takenColors.contains(c)) {
@@ -137,8 +148,8 @@ public class LocalLobbyPane extends StackPane {
                 break;
             }
         }
-        
-        players.add(new LobbyPlayer(name, avatar, color, true));
+
+        players.add(new LobbyPlayer("ai-" + System.currentTimeMillis() + "-" + rand.nextInt(1000), name, color, true, avatar));
         refreshGrid();
     }
 
@@ -147,10 +158,10 @@ public class LocalLobbyPane extends StackPane {
         for (int i = 0; i < 8; i++) {
             int row = i / 2;
             int col = i % 2;
-            
+
             LobbyPlayer p = (i < players.size()) ? players.get(i) : null;
             final int index = i;
-            PlayerCard card = new PlayerCard(p, () -> {
+            PlayerCard card = new PlayerCard(p, false, () -> {
                 players.remove(index);
                 refreshGrid();
             });
@@ -159,101 +170,137 @@ public class LocalLobbyPane extends StackPane {
     }
 
     private void showAddPlayerModal(boolean isAi) {
-        if (players.size() >= 8) return;
+        if (players.size() >= 8)
+            return;
 
         Stage modal = new Stage(StageStyle.TRANSPARENT);
         modal.initModality(Modality.APPLICATION_MODAL);
-        
-        VBox root = new VBox(20);
-        root.setPadding(new Insets(30));
-        root.setStyle("-fx-background-color: #2c3e50; -fx-border-color: #d4af37; -fx-border-width: 2; -fx-background-radius: 15; -fx-border-radius: 15;");
+
+        VBox root = new VBox(25);
+        root.setPadding(new Insets(35));
+        root.setStyle("-fx-background-color: #3d2b1f; " +
+                "-fx-border-color: #d4af37; " +
+                "-fx-border-width: 4; " +
+                "-fx-background-radius: 20; " +
+                "-fx-border-radius: 20; " +
+                "-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.8), 20, 0, 0, 0);");
         root.setAlignment(Pos.CENTER);
 
-        Label title = new Label("Add New Player");
-        title.setFont(Font.font("System", FontWeight.BOLD, 24));
-        title.setTextFill(Color.WHITE);
+        Label title = new Label("MAGDAGDAG NG MANLALARO");
+        if (Main.HEADER_FONT != null)
+            title.setFont(Main.HEADER_FONT);
+        else
+            title.setFont(Font.font("System", FontWeight.BOLD, 28));
+        title.setTextFill(Color.web("#d4af37"));
 
         TextField nameField = new TextField();
-        nameField.setPromptText("Enter Player Name");
-        nameField.setStyle("-fx-font-size: 16px;");
+        nameField.setPromptText("Ilagay ang Pangalan");
+        nameField.setStyle(
+                "-fx-font-size: 18px; -fx-background-color: #2c1e14; -fx-text-fill: white; -fx-border-color: #5d4037;");
+        if (Main.BODY_FONT != null)
+            nameField.setFont(Main.BODY_FONT);
 
         // Avatar Picker
-        Label avatarLabel = new Label("Select Avatar:");
+        Label avatarLabel = new Label("Pumili ng Avatar:");
         avatarLabel.setTextFill(Color.WHITE);
         HBox avatarBox = new HBox(10);
         avatarBox.setAlignment(Pos.CENTER);
-        ToggleGroup avatarGroup = new ToggleGroup();
-        String selectedAvatar[] = {"/com/mykogroup/riskclone/assets/Avatar1.png"};
+        String selectedAvatar[] = { "/com/mykogroup/riskclone/assets/Avatar1.png" };
 
         for (int i = 1; i <= 6; i++) {
             String path = "/com/mykogroup/riskclone/assets/Avatar" + i + ".png";
-            ToggleButton btn = new ToggleButton();
             ImageView iv = new ImageView(new Image(getClass().getResourceAsStream(path)));
             iv.setFitWidth(50);
             iv.setFitHeight(50);
-            btn.setGraphic(iv);
-            btn.setToggleGroup(avatarGroup);
-            if (i == 1) btn.setSelected(true);
-            btn.setOnAction(e -> selectedAvatar[0] = path);
-            avatarBox.getChildren().add(btn);
+            
+            Button aBtn = new Button();
+            aBtn.setGraphic(iv);
+            aBtn.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-border-width: 2;");
+            
+            aBtn.setOnAction(e -> {
+                selectedAvatar[0] = path;
+                avatarBox.getChildren().forEach(n -> n.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-border-width: 2;"));
+                aBtn.setStyle("-fx-background-color: rgba(212, 175, 55, 0.3); -fx-border-color: #d4af37; -fx-border-width: 2;");
+            });
+            
+            if (i == 1) {
+                aBtn.setStyle("-fx-background-color: rgba(212, 175, 55, 0.3); -fx-border-color: #d4af37; -fx-border-width: 2;");
+            }
+            
+            avatarBox.getChildren().add(aBtn);
+            Main.addHoverEffect(aBtn);
         }
 
         // Color Picker
-        Label colorLabel = new Label("Select Color:");
+        Label colorLabel = new Label("Pumili ng Kulay:");
         colorLabel.setTextFill(Color.WHITE);
-        FlowPane colorBox = new FlowPane(10, 10);
+        if (Main.BODY_FONT != null) colorLabel.setFont(Main.BODY_FONT);
+
+        HBox colorBox = new HBox(10);
         colorBox.setAlignment(Pos.CENTER);
-        colorBox.setPrefWrapLength(200);
         
-        List<String> takenColors = players.stream().map(LobbyPlayer::getColorHex).collect(Collectors.toList());
-        ToggleGroup colorGroup = new ToggleGroup();
+        List<String> takenColors = players.stream().map(p -> p.color).collect(Collectors.toList());
         String selectedColor[] = {null};
 
         for (String hex : DEFAULT_COLORS) {
-            ToggleButton btn = new ToggleButton();
-            Circle c = new Circle(15, Color.web(hex));
-            btn.setGraphic(c);
-            btn.setToggleGroup(colorGroup);
+            Button cBtn = new Button();
+            cBtn.setPrefSize(35, 35);
+            cBtn.setStyle("-fx-background-color: " + hex + "; -fx-border-color: transparent; -fx-border-width: 2; -fx-background-radius: 50%; -fx-border-radius: 50%;");
             
             if (takenColors.contains(hex)) {
-                btn.setDisable(true);
-                btn.setOpacity(0.3);
-            } else if (selectedColor[0] == null) {
-                btn.setSelected(true);
-                selectedColor[0] = hex;
+                cBtn.setDisable(true);
+                cBtn.setOpacity(0.3);
+            } else {
+                if (selectedColor[0] == null) {
+                    selectedColor[0] = hex;
+                    cBtn.setStyle(cBtn.getStyle().replace("-fx-border-color: transparent;", "-fx-border-color: #d4af37;"));
+                }
+                cBtn.setOnAction(e -> {
+                    selectedColor[0] = hex;
+                    colorBox.getChildren().forEach(n -> n.setStyle(n.getStyle().replace("-fx-border-color: #d4af37;", "-fx-border-color: transparent;")));
+                    cBtn.setStyle(cBtn.getStyle().replace("-fx-border-color: transparent;", "-fx-border-color: #d4af37;"));
+                });
+                Main.addHoverEffect(cBtn);
             }
-            
-            btn.setOnAction(e -> selectedColor[0] = hex);
-            colorBox.getChildren().add(btn);
+            colorBox.getChildren().add(cBtn);
         }
 
         Label errorLabel = new Label("");
         errorLabel.setTextFill(Color.web("#ef4444"));
         errorLabel.setFont(Font.font(14));
 
-        Button addBtn = new Button("ADD PLAYER");
-        addBtn.setStyle("-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 30;");
+        Button addBtn = new Button("DAGDAGAN");
+        addBtn.setStyle(
+                "-fx-background-color: #27ae60; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 30; -fx-background-radius: 5;");
+        if (Main.BODY_FONT != null)
+            addBtn.setFont(Main.BODY_FONT);
         addBtn.setOnAction(e -> {
             String name = nameField.getText().trim();
             if (name.isEmpty()) {
-                errorLabel.setText("Please enter a name!");
-                nameField.setStyle("-fx-font-size: 16px; -fx-border-color: #ef4444; -fx-border-width: 2;");
+                errorLabel.setText("Ilagay ang pangalan!");
+                nameField.setStyle(
+                        "-fx-font-size: 18px; -fx-background-color: #2c1e14; -fx-text-fill: white; -fx-border-color: #ef4444; -fx-border-width: 2;");
                 return;
             }
-            players.add(new LobbyPlayer(name, selectedAvatar[0], selectedColor[0], isAi));
+            players.add(new LobbyPlayer("player-" + System.currentTimeMillis(), name, selectedColor[0], isAi, selectedAvatar[0]));
             modal.close();
             refreshGrid();
         });
+        Main.addHoverEffect(addBtn);
 
-        Button cancelBtn = new Button("CANCEL");
-        cancelBtn.setStyle("-fx-background-color: #ef4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 30;");
+        Button cancelBtn = new Button("I-cancel");
+        cancelBtn.setStyle(
+                "-fx-background-color: #ef4444; -fx-text-fill: white; -fx-font-weight: bold; -fx-padding: 10 30; -fx-background-radius: 5;");
+        if (Main.BODY_FONT != null)
+            cancelBtn.setFont(Main.BODY_FONT);
         cancelBtn.setOnAction(e -> modal.close());
+        Main.addHoverEffect(cancelBtn);
 
         HBox actions = new HBox(20, cancelBtn, addBtn);
         actions.setAlignment(Pos.CENTER);
 
         root.getChildren().addAll(title, nameField, errorLabel, avatarLabel, avatarBox, colorLabel, colorBox, actions);
-        
+
         Scene scene = new Scene(root);
         scene.setFill(Color.TRANSPARENT);
         modal.setScene(scene);
@@ -269,10 +316,6 @@ public class LocalLobbyPane extends StackPane {
             btn.setGraphic(iv);
             btn.setStyle("-fx-background-color: transparent; -fx-padding: 0;");
             btn.setCursor(javafx.scene.Cursor.HAND);
-            
-            // Hover effect
-            btn.setOnMouseEntered(e -> btn.setOpacity(0.8));
-            btn.setOnMouseExited(e -> btn.setOpacity(1.0));
         } catch (Exception e) {
             btn.setText(path.substring(path.lastIndexOf('/') + 1));
         }
