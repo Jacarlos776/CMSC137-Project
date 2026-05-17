@@ -219,6 +219,57 @@ public class GameState {
         this.draftPools.putAll(pools);
     }
 
+    // --- Tie-Breaker Helpers ---
+
+    public long getProvinceCount(String playerId) {
+        if (playerId == null) return 0;
+        return provinces.stream().filter(prov -> playerId.equals(prov.getOwnerId())).count();
+    }
+
+    public long getTroopCount(String playerId) {
+        if (playerId == null) return 0;
+        return provinces.stream().filter(prov -> playerId.equals(prov.getOwnerId())).mapToInt(Province::getArmyCount).sum();
+    }
+
+    public int getCompletedRegionsCount(String playerId) {
+        if (playerId == null) return 0;
+        int count = 0;
+        for (Region region : regions) {
+            boolean ownsEntireRegion = true;
+            for (String provinceId : region.getProvinces()) {
+                Optional<Province> p = getProvince(provinceId);
+                if (p.isEmpty() || !playerId.equals(p.get().getOwnerId())) {
+                    ownsEntireRegion = false;
+                    break;
+                }
+            }
+            if (ownsEntireRegion) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    public Player determineWinnerByTieBreakers(List<Player> candidates) {
+        if (candidates == null || candidates.isEmpty()) return null;
+        return candidates.stream()
+                .max((p1, p2) -> {
+                    long p1Prov = getProvinceCount(p1.getId());
+                    long p2Prov = getProvinceCount(p2.getId());
+                    if (p1Prov != p2Prov) {
+                        return Long.compare(p1Prov, p2Prov);
+                    }
+                    long p1Troop = getTroopCount(p1.getId());
+                    long p2Troop = getTroopCount(p2.getId());
+                    if (p1Troop != p2Troop) {
+                        return Long.compare(p1Troop, p2Troop);
+                    }
+                    int p1Reg = getCompletedRegionsCount(p1.getId());
+                    int p2Reg = getCompletedRegionsCount(p2.getId());
+                    return Integer.compare(p1Reg, p2Reg);
+                }).orElse(null);
+    }
+
     // --- AI Helpers ---
     @JsonIgnore
     public List<Province> getClaimedProvinces() {

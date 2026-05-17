@@ -142,6 +142,8 @@ public class Main extends Application {
     private int phaseTurnDuration;
     private String currentPhaseName;
     private int currentPlayerIndex = 0; // Tracks whose turn it is locally
+    private int maxTurnCap = 10;
+    private int currentTurnCount = 1;
 
     // --- Core Game State ---
     private GameState masterState;
@@ -497,6 +499,7 @@ public class Main extends Application {
     // === GAME PHASES ===
     // CLAIMING PHASE
     private void startClaimingPhase() {
+        currentTurnCount = 1;
         currentPhaseName = "Claiming";
         System.out.println("--- Starting Claiming Phase ---");
         masterState.setCurrentPhase(GameState.GamePhase.CLAIMING);
@@ -635,9 +638,15 @@ public class Main extends Application {
         } else if (survivors.isEmpty()) {
             showGameOverScreen(null);
         } else {
-            new Timeline(new KeyFrame(Duration.seconds(1), ev -> {
-                startDraftingPhase();
-            })).play();
+            currentTurnCount++;
+            if (currentTurnCount > maxTurnCap) {
+                Player winner = masterState.determineWinnerByTieBreakers(survivors);
+                showGameOverScreen(winner);
+            } else {
+                new Timeline(new KeyFrame(Duration.seconds(1), ev -> {
+                    startDraftingPhase();
+                })).play();
+            }
         }
     }
 
@@ -963,7 +972,7 @@ public class Main extends Application {
         new Thread(() -> {
             try {
                 com.mykogroup.riskclone.network.GameServer server =
-                        new com.mykogroup.riskclone.network.GameServer(5050);
+                        new com.mykogroup.riskclone.network.GameServer(5050, maxTurnCap);
                 server.start();
                 int port = server.getPort();
 
@@ -1258,13 +1267,18 @@ public class Main extends Application {
         // Wire controller to UI
         networkController.attachUI(gameBoard, timerLbl, playerLbl, draftLbl, finishedBtn);
         networkController.setOnGameOverCallback(winnerId -> {
-            javafx.scene.control.Alert alert = new javafx.scene.control.Alert(
-                    javafx.scene.control.Alert.AlertType.INFORMATION);
-            alert.setTitle("Game Over");
-            alert.setHeaderText(winnerId == null ? "Total Annihilation! No survivors."
-                    : "Player " + winnerId + " wins!");
-            alert.setOnHidden(e -> resetGameToMenu());
-            alert.show();
+            Player winner = null;
+            if (winnerId != null) {
+                if (networkController.getLastReceivedState() != null) {
+                    winner = networkController.getLastReceivedState().getPlayers().stream()
+                            .filter(p -> p.getId().equals(winnerId))
+                            .findFirst().orElse(null);
+                }
+                if (winner == null) {
+                    winner = new Player(winnerId, "Player " + winnerId, false, "/com/mykogroup/riskclone/assets/Avatar1.png");
+                }
+            }
+            showGameOverScreen(winner);
         });
     }
 

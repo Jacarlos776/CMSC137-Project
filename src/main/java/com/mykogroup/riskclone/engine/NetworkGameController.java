@@ -54,6 +54,10 @@ public class NetworkGameController implements GameClientListener {
     private GameState lastReceivedState = null;
     private Map<String, String> lastReceivedColors = null;
 
+    public GameState getLastReceivedState() {
+        return lastReceivedState;
+    }
+
     // Called by Main once the game view is constructed
     public void attachUI(InteractiveMapPane gameBoard,
                          Label timerLabel,

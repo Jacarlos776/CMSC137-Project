@@ -62,9 +62,19 @@ public class GameServer {
     };
     private int aiColorIdx = 0;
 
+    private final int maxTurnCap;
+    private int currentTurnCount = 1;
+
     // --- Lifecycle ---
 
-    public GameServer(int port) { this.requestedPort = port; }
+    public GameServer(int port) {
+        this(port, 20);
+    }
+
+    public GameServer(int port, int maxTurnCap) {
+        this.requestedPort = port;
+        this.maxTurnCap = maxTurnCap;
+    }
 
     public void start() throws IOException {
         serverSocket = new ServerSocket(requestedPort);
@@ -218,6 +228,7 @@ public class GameServer {
             return;
         }
         gameStarted = true;
+        currentTurnCount = 1;
 
         gameState = new GameState();
         for (LobbyPlayer lp : lobbyPlayers) {
@@ -357,6 +368,14 @@ public class GameServer {
         List<Player> survivors = gameState.getAlivePlayers();
         if (survivors.size() <= 1) {
             String winnerId = survivors.isEmpty() ? null : survivors.get(0).getId();
+            broadcast(build(MessageType.GAME_OVER, null, new GameOverPayload(winnerId)));
+            return;
+        }
+
+        currentTurnCount++;
+        if (currentTurnCount > maxTurnCap) {
+            Player winner = gameState.determineWinnerByTieBreakers(survivors);
+            String winnerId = winner == null ? null : winner.getId();
             broadcast(build(MessageType.GAME_OVER, null, new GameOverPayload(winnerId)));
             return;
         }
