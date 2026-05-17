@@ -13,4 +13,5 @@ public interface GameClientListener {
     void onDisconnected();          // socket closed / server unreachable
     default void onTimerUpdate(String phase, int secondsRemaining) {}
     default void onResolutionPlayback(ResolutionPlaybackPayload payload) {}
+    default void onChatMessage(ChatBroadcastPayload payload) {}
 }
